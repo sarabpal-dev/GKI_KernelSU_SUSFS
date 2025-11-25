@@ -264,7 +264,7 @@ jobs:
           files: ./release-files/*
           name: ${{ env.RELEASE_NAME }}
           body_path: release_body.md
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.RELEASE }}
 
       - name: Display Files Uploaded
         run: |
