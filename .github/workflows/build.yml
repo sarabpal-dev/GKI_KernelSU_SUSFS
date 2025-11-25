@@ -905,7 +905,7 @@ jobs:
           # Add artifact summary with presence verification
           echo "## Build Artifacts" >> build_summary.md
 
-          echo "### Misc (uploaded files)" >> build_summary.md
+          echo "### Boot Images" >> build_summary.md
           FILES_PRESENT=0
           for f in "${{ env.FILE_NAME }}-boot.img" "${{ env.FILE_NAME }}-boot-gz.img" "${{ env.FILE_NAME }}-boot-lz4.img"; do
             if [ -f "$f" ]; then FILES_PRESENT=$((FILES_PRESENT+1)); fi
@@ -915,19 +915,27 @@ jobs:
           else
             MISC_STATUS="❌"
           fi
-          echo "- **Set**: $MISC_STATUS ${{ env.FILE_NAME }}-Misc" >> build_summary.md
+          echo "- **Status**: $MISC_STATUS ${{ env.FILE_NAME }}-Misc" >> build_summary.md
           if [ "$MISC_STATUS" = "✅" ]; then
             echo "  Included:" >> build_summary.md
             for f in "${{ env.FILE_NAME }}-boot.img" "${{ env.FILE_NAME }}-boot-gz.img" "${{ env.FILE_NAME }}-boot-lz4.img"; do
-              if [ -f "$f" ]; then
               if [ -f "$f" ]; then
                 echo "  - $f" >> build_summary.md
               fi
             done
           fi
+          echo "" >> build_summary.md
+
+          # Check for vmlinux
+          if [ -f "$GITHUB_WORKSPACE/vmlinux" ]; then
+            echo "- **vmlinux**: ✅ ${{ env.FILE_NAME }}-vmlinux" >> build_summary.md
+          else
+            echo "- **vmlinux**: ❌ Not found" >> build_summary.md
+          fi
+          echo "" >> build_summary.md
 
           echo "### Diagnostics" >> build_summary.md
-          echo "- **Rejected Patches**: ${{ env.FILE_NAME }}-Rejected-Patches" >> build_summary.md
+          echo "- **Rejected Patches Count**: $REJ_COUNT" >> build_summary.md
           if [ -f patch-rejects/index.txt ]; then
             if [ -s patch-rejects/index.txt ]; then
               echo "  Rejected files:" >> build_summary.md
@@ -940,7 +948,6 @@ jobs:
           else
             echo "  No rejected patches found." >> build_summary.md
           fi
-
 
       - name: Upload vmlinux
         uses: actions/upload-artifact@v4
