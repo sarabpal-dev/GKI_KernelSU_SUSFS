@@ -365,13 +365,13 @@ jobs:
             patch -p1 -F3 --forward < clear_page_16bytes_align__pi.patch
           fi
 
-      - name: Add BBG
-        run: |
-          cd "$KERNEL_ROOT"
-          echo "Adding BBG..."
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
-          echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
-          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' common/security/Kconfig
+      #- name: Add BBG
+        #run: |
+          #cd "$KERNEL_ROOT"
+          #echo "Adding BBG..."
+          #wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+          #echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
+          #sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' common/security/Kconfig
 
       - name: Apply Module Check Bypass
         if: ${{ matrix.build_type == 'bypass' }}
@@ -620,6 +620,25 @@ jobs:
           else
             tools/bazel build --config=fast --lto=thin //common:kernel_aarch64_dist || exit 1
           fi
+          
+      - name: Copy vmlinux for release
+        run: |
+          cd "$KERNEL_ROOT"
+          VMLINUX_PATH=""
+          # Locate vmlinux based on build system
+          if [ -f "./out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/vmlinux" ]; then
+            VMLINUX_PATH="./out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/vmlinux"
+          elif [ -f "./bazel-bin/common/kernel_aarch64/vmlinux" ]; then
+            VMLINUX_PATH="./bazel-bin/common/kernel_aarch64/vmlinux"
+          elif [ -f "./common/vmlinux" ]; then
+            VMLINUX_PATH="./common/vmlinux"
+          else
+            echo "Warning: vmlinux not found in expected locations."
+            exit 1
+          fi
+          # Copy to workspace root so upload-artifact can find it
+          cp "$VMLINUX_PATH" "$GITHUB_WORKSPACE/vmlinux"
+          echo "vmlinux copied to workspace root for artifact upload."
 
       - name: Prepare AnyKernel3
         run: |
@@ -786,14 +805,6 @@ jobs:
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
           cp ./boot-lz4.img ../${{ env.FILE_NAME }}-boot-lz4.img
 
-      - name: Upload AnyKernel3 Artifacts
-        id: upload_ak3
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.FILE_NAME }}-AnyKernel3
-          path: |
-            ./AnyKernel3/**
-          compression-level: 9
 
       - name: Scan and collect patch rejects
         if: ${{ always() }}
@@ -832,9 +843,6 @@ jobs:
         with:
           name: ${{ env.FILE_NAME }}-Misc
           path: |
-            ${{ env.FILE_NAME }}-Image
-            ${{ env.FILE_NAME }}-Image.gz
-            ${{ env.FILE_NAME }}-Image.lz4
             ${{ env.FILE_NAME }}-boot.img
             ${{ env.FILE_NAME }}-boot-gz.img
             ${{ env.FILE_NAME }}-boot-lz4.img
@@ -856,7 +864,7 @@ jobs:
           echo "## Build Information" >> build_summary.md
           echo "- **Android Version**: ${{ inputs.android_version }}" >> build_summary.md
           echo "- **Kernel Version**: ${{ inputs.kernel_version }}.${{ inputs.sub_level }}" >> build_summary.md
-          echo "- **BBG**: Installed" >> build_summary.md
+          echo "- **BBG**: Not Installed" >> build_summary.md
           echo "- **Build Type**: ${{ matrix.build_type }}" >> build_summary.md
           echo "" >> build_summary.md
 
@@ -897,17 +905,9 @@ jobs:
           # Add artifact summary with presence verification
           echo "## Build Artifacts" >> build_summary.md
 
-          # Verify AnyKernel3 contents - check if kernel Image was actually copied (indicates successful build)
-          if [ -d "AnyKernel3" ] && [ -f "AnyKernel3/Image" ]; then
-            AK3_STATUS="✅"
-          else
-            AK3_STATUS="❌"
-          fi
-          echo "- **AnyKernel3**: $AK3_STATUS ${{ env.FILE_NAME }}-AnyKernel3" >> build_summary.md
-
           echo "### Misc (uploaded files)" >> build_summary.md
           FILES_PRESENT=0
-          for f in "${{ env.FILE_NAME }}-Image" "${{ env.FILE_NAME }}-Image.gz" "${{ env.FILE_NAME }}-Image.lz4" "${{ env.FILE_NAME }}-boot.img" "${{ env.FILE_NAME }}-boot-gz.img" "${{ env.FILE_NAME }}-boot-lz4.img"; do
+          for f in "${{ env.FILE_NAME }}-boot.img" "${{ env.FILE_NAME }}-boot-gz.img" "${{ env.FILE_NAME }}-boot-lz4.img"; do
             if [ -f "$f" ]; then FILES_PRESENT=$((FILES_PRESENT+1)); fi
           done
           if [ "$FILES_PRESENT" -gt 0 ]; then
@@ -918,7 +918,8 @@ jobs:
           echo "- **Set**: $MISC_STATUS ${{ env.FILE_NAME }}-Misc" >> build_summary.md
           if [ "$MISC_STATUS" = "✅" ]; then
             echo "  Included:" >> build_summary.md
-            for f in "${{ env.FILE_NAME }}-Image" "${{ env.FILE_NAME }}-Image.gz" "${{ env.FILE_NAME }}-Image.lz4" "${{ env.FILE_NAME }}-boot.img" "${{ env.FILE_NAME }}-boot-gz.img" "${{ env.FILE_NAME }}-boot-lz4.img"; do
+            for f in "${{ env.FILE_NAME }}-boot.img" "${{ env.FILE_NAME }}-boot-gz.img" "${{ env.FILE_NAME }}-boot-lz4.img"; do
+              if [ -f "$f" ]; then
               if [ -f "$f" ]; then
                 echo "  - $f" >> build_summary.md
               fi
@@ -940,3 +941,10 @@ jobs:
             echo "  No rejected patches found." >> build_summary.md
           fi
 
+
+      - name: Upload vmlinux
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILE_NAME }}-vmlinux
+          path: vmlinux
+          compression-level: 6
