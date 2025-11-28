@@ -503,8 +503,13 @@ jobs:
           echo "CONFIG_DEBUG_INFO=y" >> "${{ env.DEFCONFIG }}"
           echo "CONFIG_DEBUG_FS=y" >> "${{ env.DEFCONFIG }}"
           echo "CONFIG_DEBUG_INFO_REDUCED=n" >> "${{ env.DEFCONFIG }}"
-          echo "CONFIG_NET_9P=y" >> "${{ env.DEFCONFIG }}"
-          echo "CONFIG_NET_9P_VIRTIO=y" >> "${{ env.DEFCONFIG }}"
+          if [[ "${{ inputs.android_version }}" == "android15" && "${{ inputs.kernel_version }}" == "6.6" ]]; then
+            echo "CONFIG_NET_9P=m" >> "${{ env.DEFCONFIG }}"
+            echo "CONFIG_NET_9P_VIRTIO=m" >> "${{ env.DEFCONFIG }}"
+          else
+            echo "CONFIG_NET_9P=y" >> "${{ env.DEFCONFIG }}"
+            echo "CONFIG_NET_9P_VIRTIO=y" >> "${{ env.DEFCONFIG }}"
+          fi
           echo 'CONFIG_CMDLINE="console=ttyAMA0"' >> "${{ env.DEFCONFIG }}"
           echo "CONFIG_GDB_SCRIPTS=y" >> "${{ env.DEFCONFIG }}"
 
