@@ -84,7 +84,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    if: inputs.build_selection == 'All' && inputs.release_type != 'Actions'
+    if: (success() || failure()) && inputs.release_type != 'Actions'
     needs:
       - build-a12-5-10
       - build-a13-5-10
@@ -166,60 +166,83 @@ jobs:
         run: |
           mkdir -p ./release-files
           
-          # Extract version number from tag (e.g., v1.5.12-r1 -> 1.5.12)
-          VERSION=$(echo "$NEW_TAG" | sed 's/^v//' | sed 's/-r[0-9]*$//')
-          echo "Extracted version: $VERSION"
-          
-          # Mapping of artifact patterns to android versions
-          declare -A ANDROID_VERSIONS=(
-            ["Android12-5.10"]="android12"
-            ["Android13-5.10"]="android13"
-            ["Android13-5.15"]="android13"
-            ["Android14-5.15"]="android14"
-            ["Android14-6.1"]="android14"
-            ["Android15-6.6"]="android15"
-          )
-          
           # Process all artifacts
           for artifact_dir in ./downloaded-artifacts/*/; do
             artifact_name=$(basename "$artifact_dir")
             echo "Processing artifact: $artifact_name"
             
-            # Extract android version and kernel version from artifact name
-            for pattern in "${!ANDROID_VERSIONS[@]}"; do
-              if [[ "$artifact_name" == *"$pattern"* ]]; then
-                android_ver="${ANDROID_VERSIONS[$pattern]}"
-                # Extract kernel version (e.g., 5.10, 5.15, 6.1, 6.6)
-                kernel_ver=$(echo "$pattern" | grep -oP '\d+\.\d+$')
+            # --- Handle vmlinux artifacts ---
+            if [[ "$artifact_name" == *"-vmlinux" ]]; then
+              # Zip name is the artifact name with .zip extension
+              zip_name="${artifact_name}.zip"
+              vmlinux_path="$artifact_dir/vmlinux"
+              
+              if [ -f "$vmlinux_path" ]; then
+                # Create a zip archive containing the vmlinux file
+                zip -j "./release-files/${zip_name}" "$vmlinux_path"
+                echo "Created vmlinux archive: ${zip_name}"
+              fi
+              continue # Move to next artifact
+            fi
+
+            # --- Handle boot image artifacts ---
+            
+            # Determine the base name for the zip file by removing the variant
+            zip_basename=$(echo "$artifact_name" | sed -E 's/-(Normal|vTomsonek)$//')
+            if [[ -z "$zip_basename" ]]; then
+                echo "Could not determine zip_basename for artifact: $artifact_name. Skipping."
+                continue
+            fi
+            zip_name="${zip_basename}.zip"
+
+            # Determine android_ver from artifact name for internal file naming
+            android_ver=""
+            if [[ "$artifact_name" == *"-android12-"* ]]; then android_ver="android12"
+            elif [[ "$artifact_name" == *"-android13-"* ]]; then android_ver="android13"
+            elif [[ "$artifact_name" == *"-android14-"* ]]; then android_ver="android14"
+            elif [[ "$artifact_name" == *"-android15-"* ]]; then android_ver="android15"
+            fi
+            
+            if [[ -z "$android_ver" ]]; then
+                echo "Could not determine android_ver for artifact: $artifact_name. Skipping."
+                continue
+            fi
+
+            # Prepare a temporary directory for files to be zipped
+            temp_zip_dir="./temp-for-zip"
+            mkdir -p "$temp_zip_dir"
+            
+            year_month=$(date +%Y-%m)
+            found_images=false
+
+            # Find original boot images, rename them, and copy to temp dir
+            for boot_img_path in "$artifact_dir"/*.img; do
+              if [ -f "$boot_img_path" ]; then
+                found_images=true
+                boot_img_name=$(basename "$boot_img_path")
                 
-                # Get year-month from artifact timestamps or use current date
-                year_month=$(date +%Y-%m)
-                
-                # Process boot images (from Normal-Misc artifacts)
-                if [[ "$artifact_name" == *"-Normal-Misc" ]]; then
-                  for boot_img in "$artifact_dir"/*.img; do
-                    if [ -f "$boot_img" ]; then
-                      # Create filename: VERSION-androidVER-YEAR-MONTH.zip
-                      new_name="${VERSION}-${android_ver}-${year_month}.zip"
-                      cp "$boot_img" "./release-files/${new_name}"
-                      echo "Created: ${new_name}"
-                    fi
-                  done
+                img_suffix=""
+                if [[ "$boot_img_name" == *"-boot.img" ]]; then img_suffix="boot.img"
+                elif [[ "$boot_img_name" == *"-boot-gz.img" ]]; then img_suffix="boot-gz.img"
+                elif [[ "$boot_img_name" == *"-boot-lz4.img" ]]; then img_suffix="boot-lz4.img"
                 fi
-                
-                # Process vmlinux files (from Normal-vmlinux artifacts)
-                if [[ "$artifact_name" == *"-Normal-vmlinux" ]]; then
-                  if [ -f "$artifact_dir/vmlinux" ]; then
-                    # Create filename: VERSION-androidVER-YEAR-MONTH-vmlinux.zip
-                    new_name="${VERSION}-${android_ver}-${year_month}-vmlinux.zip"
-                    cp "$artifact_dir/vmlinux" "./release-files/${new_name}"
-                    echo "Created: ${new_name}"
-                  fi
+
+                if [[ -n "$img_suffix" ]]; then
+                  new_internal_name="${android_ver}-${year_month}-${img_suffix}"
+                  cp "$boot_img_path" "${temp_zip_dir}/${new_internal_name}"
+                  echo "  - Staging for zip: ${new_internal_name}"
                 fi
-                
-                break
               fi
             done
+
+            # If images were found, create the zip archive
+            if [ "$found_images" = true ]; then
+              (cd "$temp_zip_dir" && zip "../release-files/${zip_name}" ./*)
+              echo "Created boot image archive: ${zip_name}"
+            fi
+
+            # Clean up temp directory
+            rm -rf "$temp_zip_dir"
           done
           
           echo "Release files prepared:"
