@@ -104,6 +104,7 @@ jobs:
           curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
           echo "===== Total Disk Space After Cleanup in GB ====="
           df -h
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -164,96 +165,10 @@ jobs:
             echo "New tag: $NEW_TAG"
             echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
 
-      - name: Download All Artifacts
+      - name: Download All Release Assets
         uses: actions/download-artifact@v5
         with:
-          path: ./downloaded-artifacts
-
-      - name: Organize Release Files
-        run: |
-          mkdir -p ./release-files
-          
-          # Process all artifacts
-          for artifact_dir in ./downloaded-artifacts/*/; do
-            artifact_name=$(basename "$artifact_dir")
-            echo "Processing artifact: $artifact_name"
-            
-            # --- Handle vmlinux artifacts ---
-            if [[ "$artifact_name" == *"-vmlinux" ]]; then
-              # Zip name is the artifact name with .zip extension
-              zip_name="${artifact_name}.zip"
-              vmlinux_path="$artifact_dir/vmlinux"
-              
-              if [ -f "$vmlinux_path" ]; then
-                # Create a zip archive containing the vmlinux file
-                zip -j "./release-files/${zip_name}" "$vmlinux_path"
-                echo "Created vmlinux archive: ${zip_name}"
-              fi
-              continue # Move to next artifact
-            fi
-
-            # --- Handle boot image artifacts ---
-            
-            # Determine the base name for the zip file by removing the variant
-            zip_basename=$(echo "$artifact_name" | sed -E 's/-(Normal|vTomsonek)$//')
-            if [[ -z "$zip_basename" ]]; then
-                echo "Could not determine zip_basename for artifact: $artifact_name. Skipping."
-                continue
-            fi
-            zip_name="${zip_basename}.zip"
-
-            # Determine android_ver from artifact name for internal file naming
-            android_ver=""
-            if [[ "$artifact_name" == *"-android12-"* ]]; then android_ver="android12"
-            elif [[ "$artifact_name" == *"-android13-"* ]]; then android_ver="android13"
-            elif [[ "$artifact_name" == *"-android14-"* ]]; then android_ver="android14"
-            elif [[ "$artifact_name" == *"-android15-"* ]]; then android_ver="android15"
-            fi
-            
-            if [[ -z "$android_ver" ]]; then
-                echo "Could not determine android_ver for artifact: $artifact_name. Skipping."
-                continue
-            fi
-
-            # Prepare a temporary directory for files to be zipped
-            temp_zip_dir="./temp-for-zip"
-            mkdir -p "$temp_zip_dir"
-            
-            year_month=$(date +%Y-%m)
-            found_images=false
-
-            # Find original boot images, rename them, and copy to temp dir
-            for boot_img_path in "$artifact_dir"/*.img; do
-              if [ -f "$boot_img_path" ]; then
-                found_images=true
-                boot_img_name=$(basename "$boot_img_path")
-                
-                img_suffix=""
-                if [[ "$boot_img_name" == *"-boot.img" ]]; then img_suffix="boot.img"
-                elif [[ "$boot_img_name" == *"-boot-gz.img" ]]; then img_suffix="boot-gz.img"
-                elif [[ "$boot_img_name" == *"-boot-lz4.img" ]]; then img_suffix="boot-lz4.img"
-                fi
-
-                if [[ -n "$img_suffix" ]]; then
-                  new_internal_name="${android_ver}-${year_month}-${img_suffix}"
-                  cp "$boot_img_path" "${temp_zip_dir}/${new_internal_name}"
-                  echo "  - Staging for zip: ${new_internal_name}"
-                fi
-              fi
-            done
-
-            # If images were found, create the zip archive
-            if [ "$found_images" = true ]; then
-              (cd "$temp_zip_dir" && zip "../release-files/${zip_name}" ./*)
-              echo "Created boot image archive: ${zip_name}"
-            fi
-
-            # Clean up temp directory
-            rm -rf "$temp_zip_dir"
-          done
-          
-          echo "Release files prepared:"
-          ls -lh ./release-files/
+          path: ./release-assets
 
       - name: Set release body
         run: |
@@ -308,12 +223,12 @@ jobs:
         with:
           tag_name: ${{ env.NEW_TAG }}
           prerelease: ${{ inputs.release_type == 'Pre-Release' }}
-          files: ./release-files/*
+          files: ./release-assets/*/*.zip
           name: ${{ env.RELEASE_NAME }}
           body_path: release_body.md
           token: ${{ secrets.RELEASE }}
 
       - name: Display Files Uploaded
         run: |
-          echo "GitHub release created with the following files:"
-          ls -lh ./release-files/
+          echo "GitHub release will be created with the following files:"
+          ls -lhR ./release-assets/
