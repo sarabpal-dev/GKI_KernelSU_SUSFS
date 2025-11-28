@@ -852,21 +852,6 @@ jobs:
             done
           fi
 
-      - name: Extra Artifacts
-        if: ${{ always() }}
-        id: upload_misc
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.FILE_NAME }}
-          path: |
-            ${{ env.FILE_NAME }}-boot.img
-            ${{ env.FILE_NAME }}-boot-gz.img
-            ${{ env.FILE_NAME }}-boot-lz4.img
-            patch-rejects/**
-            build_summary.md
-          if-no-files-found: ignore
-          compression-level: 9
-          
       - name: Generate Build Summary
         if: ${{ always() }}
         run: |
@@ -965,9 +950,26 @@ jobs:
             echo "  No rejected patches found." >> build_summary.md
           fi
 
+      - name: Extra Artifacts
+        if: ${{ always() }}
+        id: upload_misc
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILE_NAME }}
+          path: |
+            ${{ env.FILE_NAME }}-boot.img
+            ${{ env.FILE_NAME }}-boot-gz.img
+            ${{ env.FILE_NAME }}-boot-lz4.img
+            patch-rejects/**
+            build_summary.md
+          if-no-files-found: ignore
+          compression-level: 9
+          
       - name: Upload vmlinux
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.FILE_NAME }}-vmlinux
           path: vmlinux
+          if-no-files-found: ignore
           compression-level: 6

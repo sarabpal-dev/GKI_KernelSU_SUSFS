@@ -97,6 +97,13 @@ jobs:
       RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
       
     steps:
+      - name: Free Disk Space
+        run: |
+          echo "===== Initial Total Disk Space in GB ====="
+          df -h
+          curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
+          echo "===== Total Disk Space After Cleanup in GB ====="
+          df -h
       - name: Checkout code
         uses: actions/checkout@v4
         with:
