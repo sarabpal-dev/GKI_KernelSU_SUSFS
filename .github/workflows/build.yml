@@ -824,6 +824,7 @@ jobs:
 
       - name: Package Release Assets
         if: success()
+        id: package_assets
         run: |
           set -e
           echo "Creating final release zip files..."
@@ -833,6 +834,7 @@ jobs:
           # --- Package Boot Images ---
           BOOT_ZIP_BASENAME=$(echo "${{ env.FILE_NAME }}" | sed -E 's/-(Normal|vTomsonek)$//')
           BOOT_ZIP_NAME="${BOOT_ZIP_BASENAME}.zip"
+          echo "boot_zip_name=${BOOT_ZIP_NAME}" >> $GITHUB_OUTPUT
           
           TEMP_BOOT_DIR="./temp-boot-zip"
           mkdir -p "$TEMP_BOOT_DIR"
@@ -855,6 +857,7 @@ jobs:
 
           # --- Package vmlinux ---
           VMLINUX_ZIP_NAME="${{ env.FILE_NAME }}-vmlinux.zip"
+          echo "vmlinux_zip_name=${VMLINUX_ZIP_NAME}" >> $GITHUB_OUTPUT
           VMLINUX_FILE="$GITHUB_WORKSPACE/vmlinux"
           if [ -f "$VMLINUX_FILE" ]; then
             zip -j "$ASSETS_DIR/$VMLINUX_ZIP_NAME" "$VMLINUX_FILE"
@@ -863,12 +866,20 @@ jobs:
             echo "vmlinux file not found to package."
           fi
           
-      - name: Upload Release Assets
+      - name: Upload Boot Images Artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: release-assets-${{ env.FILE_NAME }}
-          path: ./release-assets/*
+          name: ${{ steps.package_assets.outputs.boot_zip_name }}
+          path: ./release-assets/${{ steps.package_assets.outputs.boot_zip_name }}
+          if-no-files-found: error
+
+      - name: Upload vmlinux Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package_assets.outputs.vmlinux_zip_name }}
+          path: ./release-assets/${{ steps.package_assets.outputs.vmlinux_zip_name }}
           if-no-files-found: error
 
       - name: Scan and collect patch rejects on Failure
