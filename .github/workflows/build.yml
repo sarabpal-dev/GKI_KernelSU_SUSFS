@@ -506,6 +506,11 @@ jobs:
           if [[ "${{ inputs.android_version }}" == "android15" && "${{ inputs.kernel_version }}" == "6.6" ]]; then
             echo "CONFIG_NET_9P=m" >> "${{ env.DEFCONFIG }}"
             echo "CONFIG_NET_9P_VIRTIO=m" >> "${{ env.DEFCONFIG }}"
+            
+            if [ -f common/modules.bzl ]; then
+              echo "Injecting 9p modules into common/modules.bzl..."
+              perl -pi -e 's/(COMMON_GKI_MODULES_LIST = \[)/$1\n    "net\/9p\/9pnet.ko",\n    "net\/9p\/9pnet_fd.ko",\n    "net\/9p\/9pnet_virtio.ko",/' common/modules.bzl
+            fi
           else
             echo "CONFIG_NET_9P=y" >> "${{ env.DEFCONFIG }}"
             echo "CONFIG_NET_9P_VIRTIO=y" >> "${{ env.DEFCONFIG }}"
