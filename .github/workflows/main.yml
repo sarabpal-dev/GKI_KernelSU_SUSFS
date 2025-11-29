@@ -235,7 +235,7 @@ jobs:
         with:
           tag_name: ${{ env.NEW_TAG }}
           prerelease: ${{ inputs.release_type == 'Pre-Release' }}
-          files: ./release-assets/*/*.zip
+          files: ./release-assets/*.zip
           name: ${{ env.RELEASE_NAME }}
           body_path: release_body.md
           token: ${{ secrets.RELEASE }}
