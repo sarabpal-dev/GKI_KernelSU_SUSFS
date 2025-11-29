@@ -97,14 +97,16 @@ jobs:
       - build-a14-6-1
       - build-a15-6-6
     steps:
-      - run: echo "All build jobs finished. Proceeding to release."
+      - name: Dump Inputs Context
+        env:
+          INPUTS_CONTEXT: ${{ toJSON(github.event.inputs) }}
+        run: echo "$INPUTS_CONTEXT"
 
   release:
     runs-on: ubuntu-latest
     if: github.event.inputs.create_release == true
     needs:
       - release_gate
-
     env:
       RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
       
