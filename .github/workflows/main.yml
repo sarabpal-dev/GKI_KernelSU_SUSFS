@@ -200,7 +200,7 @@ jobs:
         if: ${{ inputs.create_release == true }}
         run: |
           if [[ "${{ github.ref_name }}" == "debug" ]]; then
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
           
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -227,9 +227,9 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           else
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
       
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -273,7 +273,7 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           fi
 
       - name: Create GitHub Release
@@ -388,7 +388,7 @@ jobs:
         if: ${{ inputs.create_release == true }}
         run: |
           if [[ "${{ github.ref_name }}" == "debug" ]]; then
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
           
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -415,9 +415,9 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           else
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
       
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -461,7 +461,7 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           fi
 
       - name: Create GitHub Release
@@ -576,7 +576,7 @@ jobs:
         if: ${{ inputs.create_release == true }}
         run: |
           if [[ "${{ github.ref_name }}" == "debug" ]]; then
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
           
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -603,9 +603,9 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           else
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
       
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -649,7 +649,7 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           fi
 
       - name: Create GitHub Release
@@ -763,7 +763,7 @@ jobs:
         if: ${{ inputs.create_release == true }}
         run: |
           if [[ "${{ github.ref_name }}" == "debug" ]]; then
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
           
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -790,9 +790,9 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           else
-            cat << 'EOF' > release_body.md
+            cat <<'EOF' > release_body.md
       
             **IMPORTANT DISCLAIMER**
             This software is provided for testing and educational purposes only. Use at your own risk.
@@ -836,7 +836,7 @@ jobs:
               -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
               -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
               -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
-            EOF
+EOF
           fi
 
       - name: Create GitHub Release
