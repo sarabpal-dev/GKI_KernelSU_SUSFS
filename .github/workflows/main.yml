@@ -105,7 +105,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    if: inputs.create_release == true || inputs.create_release == 'true'
+    if: ${{ inputs.create_release == true }}
     needs:
       - release_gate
     env:
