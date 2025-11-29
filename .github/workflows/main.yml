@@ -98,10 +98,14 @@ jobs:
       - build-a15-6-6
     steps:
       - run: echo "All build jobs finished. Proceeding to release."
+      - name: Debug Inputs
+        run: |
+          echo "inputs.create_release: ${{ inputs.create_release }}"
+          echo "inputs.build_selection: ${{ inputs.build_selection }}"
 
   release:
     runs-on: ubuntu-latest
-    if: github.event.inputs.create_release == 'true'
+    if: inputs.create_release == true || inputs.create_release == 'true'
     needs:
       - release_gate
     env:
@@ -177,7 +181,7 @@ jobs:
             echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
 
       - name: Download All Release Assets
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           path: ./release-assets
 
