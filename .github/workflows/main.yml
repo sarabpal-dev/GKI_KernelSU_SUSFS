@@ -44,6 +44,26 @@ on:
 
 jobs:
 
+  define_release:
+    runs-on: ubuntu-latest
+    if: inputs.create_release == true
+    outputs:
+      release_tag: ${{ steps.gen_tag.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate New Tag
+        id: gen_tag
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v1.5.12-r0"
+          fi
+          NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
+          echo "release_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "Generated Release Tag: $NEW_TAG"
+
   build-a12-5-10:
     if: inputs.build_selection == 'All' || inputs.build_selection == 'Android12-5.10'
     uses: ./.github/workflows/kernel-a12-5-10.yml
@@ -86,33 +106,36 @@ jobs:
     with:
       ksu_variant: "WKSU"
 
-  release_gate:
+  release_a12:
     runs-on: ubuntu-latest
     if: always()
     needs:
       - build-a12-5-10
-      - build-a13-5-10
-      - build-a13-5-15
-      - build-a14-5-15
-      - build-a14-6-1
-      - build-a15-6-6
+      - define_release
     env:
       RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
     steps:
-      - run: echo "All build jobs finished. Proceeding to release."
+      - run: echo "A12 build jobs finished. Proceeding to release."
       - name: Debug Inputs
         run: |
           echo "inputs.create_release: ${{ inputs.create_release }}"
-          echo "inputs.build_selection: ${{ inputs.build_selection }}"
 
-      - name: Free Disk Space
+      - name: Check Initial Disk Space
         if: ${{ inputs.create_release == true }}
         run: |
           echo "===== Initial Total Disk Space in GB ====="
-          df -h
+          df -BG
+
+      - name: Download Apache Arrow's util_free_space.sh
+        if: ${{ inputs.create_release == true }}
+        run: |
           curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
+
+      - name: Check Disk Space After Cleanup
+        if: ${{ inputs.create_release == true }}
+        run: |
           echo "===== Total Disk Space After Cleanup in GB ====="
-          df -h
+          df -BG
 
       - name: Checkout code
         if: ${{ inputs.create_release == true }}
@@ -165,25 +188,12 @@ jobs:
           echo "BBG_REF=$BBG_REF" >> $GITHUB_ENV
           echo "BBG_URL=$BBG_URL" >> $GITHUB_ENV
 
-      - name: Generate New Tag
-        if: ${{ inputs.create_release == true }}
-        run: |
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-            if [ -z "$LATEST_TAG" ]; then
-              LATEST_TAG="v1.5.12-r0"
-            fi
-            
-            NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
-    
-            echo "New tag: $NEW_TAG"
-            echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
-
-      - name: Download All Release Assets
+      - name: Download Release Assets
         if: ${{ inputs.create_release == true }}
         uses: actions/download-artifact@v4
         with:
           path: ./release-assets
-          pattern: "*"
+          pattern: "*-android12-*"
           merge-multiple: true
 
       - name: Set release body
@@ -270,7 +280,570 @@ jobs:
         if: ${{ inputs.create_release == true }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.NEW_TAG }}
+          tag_name: ${{ needs.define_release.outputs.release_tag }}
+          prerelease: ${{ inputs.release_type == 'Pre-Release' }}
+          files: ./release-assets/*.zip
+          name: ${{ env.RELEASE_NAME }}
+          body_path: release_body.md
+          token: ${{ secrets.RELEASE }}
+
+      - name: Display Files Uploaded
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "GitHub release will be created with the following files:"
+          ls -lhR ./release-assets/
+
+  release_a13:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - build-a13-5-10
+      - build-a13-5-15
+      - define_release
+    env:
+      RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
+    steps:
+      - run: echo "A13 build jobs finished. Proceeding to release."
+      - name: Debug Inputs
+        run: |
+          echo "inputs.create_release: ${{ inputs.create_release }}"
+
+      - name: Check Initial Disk Space
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "===== Initial Total Disk Space in GB ====="
+          df -BG
+
+      - name: Download Apache Arrow's util_free_space.sh
+        if: ${{ inputs.create_release == true }}
+        run: |
+          curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
+
+      - name: Check Disk Space After Cleanup
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "===== Total Disk Space After Cleanup in GB ====="
+          df -BG
+
+      - name: Checkout code
+        if: ${{ inputs.create_release == true }}
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Get commit hashes and generate commit URLs
+        if: ${{ inputs.create_release == true }}
+        run: |
+          GITLAB_OWNER="simonpunk"
+          GITLAB_REPO="susfs4ksu"
+          
+          declare -A BRANCH_MAP=(
+            ["gki_android12_5_10"]="gki-android12-5.10"
+            ["gki_android13_5_10"]="gki-android13-5.10"
+            ["gki_android13_5_15"]="gki-android13-5.15"
+            ["gki_android14_5_15"]="gki-android14-5.15"
+            ["gki_android14_6_1"]="gki-android14-6.1"
+            ["gki_android15_6_6"]="gki-android15-6.6"
+          )
+          
+          for var_name in "${!BRANCH_MAP[@]}"; do
+            branch_name="${BRANCH_MAP[$var_name]}"
+            COMMIT_HASH=$(git ls-remote https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO.git refs/heads/$branch_name | awk '{ print $1 }')
+            
+            if [[ -n "$COMMIT_HASH" ]]; then
+              COMMIT_URL="https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO/-/commit/$COMMIT_HASH"
+              echo "$branch_name Commit: $COMMIT_HASH"
+              echo "$branch_name Commit URL: $COMMIT_URL"
+              
+              echo "COMMIT_HASH_${var_name}=$COMMIT_HASH" >> "$GITHUB_ENV"
+              echo "COMMIT_URL_${var_name}=$COMMIT_URL" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Get KernelSU variant refs and links
+        if: ${{ inputs.create_release == true }}
+        run: |
+          # Get WKSU latest commit from wild branch
+          WKSU_REF=$(git ls-remote "https://github.com/WildKernels/Wild_KSU.git" refs/heads/wild | awk '{print $1}')
+          WKSU_URL="https://github.com/WildKernels/Wild_KSU/commit/$WKSU_REF"
+          echo "WKSU_REF=$WKSU_REF" >> $GITHUB_ENV
+          echo "WKSU_URL=$WKSU_URL" >> $GITHUB_ENV
+          
+          # Get Baseband-guard latest commit from main branch
+          BBG_REF=$(git ls-remote "https://github.com/vc-teahouse/Baseband-guard.git" refs/heads/main | awk '{print $1}')
+          BBG_URL="https://github.com/vc-teahouse/Baseband-guard/commit/$BBG_REF"
+          echo "BBG_REF=$BBG_REF" >> $GITHUB_ENV
+          echo "BBG_URL=$BBG_URL" >> $GITHUB_ENV
+
+      - name: Download Release Assets
+        if: ${{ inputs.create_release == true }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-assets
+          pattern: "*-android13-*"
+          merge-multiple: true
+
+      - name: Set release body
+        if: ${{ inputs.create_release == true }}
+        run: |
+          if [[ "${{ github.ref_name }}" == "debug" ]]; then
+            cat << 'EOF' > release_body.md
+          
+            **IMPORTANT DISCLAIMER**
+            This software is provided for testing and educational purposes only. Use at your own risk.
+            The developers are not responsible for any damage, data loss, or issues that may occur.
+            Please ensure you have proper backups before installation.
+
+            **Debug Build Information**
+            This build is compiled with SUSFS patches and includes `vmlinux` for debugging.
+
+            **Debug Features:**
+            -> **Physical Memory Debugging**: `/dev/mem` is enabled to allow debugging physical memory on device boot.
+               *Note: You may receive an Android security warning regarding this. It is expected and can be ignored.*
+            -> **QEMU/GDB Support**: Includes patches to run with QEMU GDB, allowing for kernel analysis on a desktop environment.
+            
+            Commit Hashes (at the time of release):
+            -> WKSU: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
+
+            -> Baseband-guard: [${{ env.BBG_REF }}](${{ env.BBG_URL }})
+
+            -> SUSFS4KSU: 
+              -> gki-android12-5.10: [${{ env.COMMIT_HASH_gki_android12_5_10 }}](${{ env.COMMIT_URL_gki_android12_5_10 }})
+              -> gki-android13-5.10: [${{ env.COMMIT_HASH_gki_android13_5_10 }}](${{ env.COMMIT_URL_gki_android13_5_10 }})
+              -> gki-android13-5.15: [${{ env.COMMIT_HASH_gki_android13_5_15 }}](${{ env.COMMIT_URL_gki_android13_5_15 }})
+              -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
+              -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
+              -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
+            EOF
+          else
+            cat << 'EOF' > release_body.md
+      
+            **IMPORTANT DISCLAIMER**
+            This software is provided for testing and educational purposes only. Use at your own risk.
+            The developers are not responsible for any damage, data loss, or issues that may occur.
+            Please ensure you have proper backups before installation.
+
+            Features:
+            -> Wild KSU
+            -> Multi Manager Support for WKSU, KernelSU-Next! Needs Testing: KSU, MKSU RKSU, xxKSU, KowSU and SukiSU (Best compatibility with WKSU, no support will be provided for other managers)
+            -> SUSFS ඞ v1.5.12
+            -> Scope-Minimized Manual hooks v1.4
+            -> Ptrace Patch Support for Older Kernels (<5.16)
+            -> IPSet Support for Advanced Network Filtering
+            -> Wireguard Support
+            -> BBR v1 Support
+            -> Added BBG support to prevent unauthorised writes to certain partitions: https://github.com/vc-teahouse/Baseband-guard
+
+            Notes:
+            -> SUS SU Mode 2 will show as disabled or not compatble due to non-kprobe hooks and is not needed anymore!
+            -> Official Kernel Flasher is broken with latest susfs, try https://github.com/fatalcoder524/KernelFlasher/
+            -> **Files ending with .zip**: Available for fastboot flashing
+            -> **Files ending with -vmlinux.zip**: Debug symbols for kernel debugging and crash analysis
+            -> **Warning**: kernel files may not boot on some Android 16 devices
+      
+            Module: 
+            -> https://github.com/sidex15/ksu_module_susfs
+      
+            Managers:
+            -> WKSU: https://github.com/WildKernels/Wild_KSU
+            -> Next: https://github.com/KernelSU-Next/KernelSU-Next
+            
+            Commit Hashes (at the time of release):
+            -> WKSU: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
+
+            -> Baseband-guard: [${{ env.BBG_REF }}](${{ env.BBG_URL }})
+
+            -> SUSFS4KSU: 
+              -> gki-android12-5.10: [${{ env.COMMIT_HASH_gki_android12_5_10 }}](${{ env.COMMIT_URL_gki_android12_5_10 }})
+              -> gki-android13-5.10: [${{ env.COMMIT_HASH_gki_android13_5_10 }}](${{ env.COMMIT_URL_gki_android13_5_10 }})
+              -> gki-android13-5.15: [${{ env.COMMIT_HASH_gki_android13_5_15 }}](${{ env.COMMIT_URL_gki_android13_5_15 }})
+              -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
+              -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
+              -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
+            EOF
+          fi
+
+      - name: Create GitHub Release
+        if: ${{ inputs.create_release == true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.define_release.outputs.release_tag }}
+          prerelease: ${{ inputs.release_type == 'Pre-Release' }}
+          files: ./release-assets/*.zip
+          name: ${{ env.RELEASE_NAME }}
+          body_path: release_body.md
+          token: ${{ secrets.RELEASE }}
+
+      - name: Display Files Uploaded
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "GitHub release will be created with the following files:"
+          ls -lhR ./release-assets/
+
+  release_a14:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - build-a14-5-15
+      - build-a14-6-1
+      - define_release
+    env:
+      RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
+    steps:
+      - run: echo "A14 build jobs finished. Proceeding to release."
+      - name: Debug Inputs
+        run: |
+          echo "inputs.create_release: ${{ inputs.create_release }}"
+
+      - name: Check Initial Disk Space
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "===== Initial Total Disk Space in GB ====="
+          df -BG
+
+      - name: Download Apache Arrow's util_free_space.sh
+        if: ${{ inputs.create_release == true }}
+        run: |
+          curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
+
+      - name: Check Disk Space After Cleanup
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "===== Total Disk Space After Cleanup in GB ====="
+          df -BG
+
+      - name: Checkout code
+        if: ${{ inputs.create_release == true }}
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Get commit hashes and generate commit URLs
+        if: ${{ inputs.create_release == true }}
+        run: |
+          GITLAB_OWNER="simonpunk"
+          GITLAB_REPO="susfs4ksu"
+          
+          declare -A BRANCH_MAP=(
+            ["gki_android12_5_10"]="gki-android12-5.10"
+            ["gki_android13_5_10"]="gki-android13-5.10"
+            ["gki_android13_5_15"]="gki-android13-5.15"
+            ["gki_android14_5_15"]="gki-android14-5.15"
+            ["gki_android14_6_1"]="gki-android14-6.1"
+            ["gki_android15_6_6"]="gki-android15-6.6"
+          )
+          
+          for var_name in "${!BRANCH_MAP[@]}"; do
+            branch_name="${BRANCH_MAP[$var_name]}"
+            COMMIT_HASH=$(git ls-remote https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO.git refs/heads/$branch_name | awk '{ print $1 }')
+            
+            if [[ -n "$COMMIT_HASH" ]]; then
+              COMMIT_URL="https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO/-/commit/$COMMIT_HASH"
+              echo "$branch_name Commit: $COMMIT_HASH"
+              echo "$branch_name Commit URL: $COMMIT_URL"
+              
+              echo "COMMIT_HASH_${var_name}=$COMMIT_HASH" >> "$GITHUB_ENV"
+              echo "COMMIT_URL_${var_name}=$COMMIT_URL" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Get KernelSU variant refs and links
+        if: ${{ inputs.create_release == true }}
+        run: |
+          # Get WKSU latest commit from wild branch
+          WKSU_REF=$(git ls-remote "https://github.com/WildKernels/Wild_KSU.git" refs/heads/wild | awk '{print $1}')
+          WKSU_URL="https://github.com/WildKernels/Wild_KSU/commit/$WKSU_REF"
+          echo "WKSU_REF=$WKSU_REF" >> $GITHUB_ENV
+          echo "WKSU_URL=$WKSU_URL" >> $GITHUB_ENV
+          
+          # Get Baseband-guard latest commit from main branch
+          BBG_REF=$(git ls-remote "https://github.com/vc-teahouse/Baseband-guard.git" refs/heads/main | awk '{print $1}')
+          BBG_URL="https://github.com/vc-teahouse/Baseband-guard/commit/$BBG_REF"
+          echo "BBG_REF=$BBG_REF" >> $GITHUB_ENV
+          echo "BBG_URL=$BBG_URL" >> $GITHUB_ENV
+
+      - name: Download Release Assets
+        if: ${{ inputs.create_release == true }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-assets
+          pattern: "*-android14-*"
+          merge-multiple: true
+
+      - name: Set release body
+        if: ${{ inputs.create_release == true }}
+        run: |
+          if [[ "${{ github.ref_name }}" == "debug" ]]; then
+            cat << 'EOF' > release_body.md
+          
+            **IMPORTANT DISCLAIMER**
+            This software is provided for testing and educational purposes only. Use at your own risk.
+            The developers are not responsible for any damage, data loss, or issues that may occur.
+            Please ensure you have proper backups before installation.
+
+            **Debug Build Information**
+            This build is compiled with SUSFS patches and includes `vmlinux` for debugging.
+
+            **Debug Features:**
+            -> **Physical Memory Debugging**: `/dev/mem` is enabled to allow debugging physical memory on device boot.
+               *Note: You may receive an Android security warning regarding this. It is expected and can be ignored.*
+            -> **QEMU/GDB Support**: Includes patches to run with QEMU GDB, allowing for kernel analysis on a desktop environment.
+            
+            Commit Hashes (at the time of release):
+            -> WKSU: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
+
+            -> Baseband-guard: [${{ env.BBG_REF }}](${{ env.BBG_URL }})
+
+            -> SUSFS4KSU: 
+              -> gki-android12-5.10: [${{ env.COMMIT_HASH_gki_android12_5_10 }}](${{ env.COMMIT_URL_gki_android12_5_10 }})
+              -> gki-android13-5.10: [${{ env.COMMIT_HASH_gki_android13_5_10 }}](${{ env.COMMIT_URL_gki_android13_5_10 }})
+              -> gki-android13-5.15: [${{ env.COMMIT_HASH_gki_android13_5_15 }}](${{ env.COMMIT_URL_gki_android13_5_15 }})
+              -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
+              -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
+              -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
+            EOF
+          else
+            cat << 'EOF' > release_body.md
+      
+            **IMPORTANT DISCLAIMER**
+            This software is provided for testing and educational purposes only. Use at your own risk.
+            The developers are not responsible for any damage, data loss, or issues that may occur.
+            Please ensure you have proper backups before installation.
+
+            Features:
+            -> Wild KSU
+            -> Multi Manager Support for WKSU, KernelSU-Next! Needs Testing: KSU, MKSU RKSU, xxKSU, KowSU and SukiSU (Best compatibility with WKSU, no support will be provided for other managers)
+            -> SUSFS ඞ v1.5.12
+            -> Scope-Minimized Manual hooks v1.4
+            -> Ptrace Patch Support for Older Kernels (<5.16)
+            -> IPSet Support for Advanced Network Filtering
+            -> Wireguard Support
+            -> BBR v1 Support
+            -> Added BBG support to prevent unauthorised writes to certain partitions: https://github.com/vc-teahouse/Baseband-guard
+
+            Notes:
+            -> SUS SU Mode 2 will show as disabled or not compatble due to non-kprobe hooks and is not needed anymore!
+            -> Official Kernel Flasher is broken with latest susfs, try https://github.com/fatalcoder524/KernelFlasher/
+            -> **Files ending with .zip**: Available for fastboot flashing
+            -> **Files ending with -vmlinux.zip**: Debug symbols for kernel debugging and crash analysis
+            -> **Warning**: kernel files may not boot on some Android 16 devices
+      
+            Module: 
+            -> https://github.com/sidex15/ksu_module_susfs
+      
+            Managers:
+            -> WKSU: https://github.com/WildKernels/Wild_KSU
+            -> Next: https://github.com/KernelSU-Next/KernelSU-Next
+            
+            Commit Hashes (at the time of release):
+            -> WKSU: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
+
+            -> Baseband-guard: [${{ env.BBG_REF }}](${{ env.BBG_URL }})
+
+            -> SUSFS4KSU: 
+              -> gki-android12-5.10: [${{ env.COMMIT_HASH_gki_android12_5_10 }}](${{ env.COMMIT_URL_gki_android12_5_10 }})
+              -> gki-android13-5.10: [${{ env.COMMIT_HASH_gki_android13_5_10 }}](${{ env.COMMIT_URL_gki_android13_5_10 }})
+              -> gki-android13-5.15: [${{ env.COMMIT_HASH_gki_android13_5_15 }}](${{ env.COMMIT_URL_gki_android13_5_15 }})
+              -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
+              -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
+              -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
+            EOF
+          fi
+
+      - name: Create GitHub Release
+        if: ${{ inputs.create_release == true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.define_release.outputs.release_tag }}
+          prerelease: ${{ inputs.release_type == 'Pre-Release' }}
+          files: ./release-assets/*.zip
+          name: ${{ env.RELEASE_NAME }}
+          body_path: release_body.md
+          token: ${{ secrets.RELEASE }}
+
+      - name: Display Files Uploaded
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "GitHub release will be created with the following files:"
+          ls -lhR ./release-assets/
+
+  release_a15:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - build-a15-6-6
+      - define_release
+    env:
+      RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
+    steps:
+      - run: echo "A15 build jobs finished. Proceeding to release."
+      - name: Debug Inputs
+        run: |
+          echo "inputs.create_release: ${{ inputs.create_release }}"
+
+      - name: Check Initial Disk Space
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "===== Initial Total Disk Space in GB ====="
+          df -BG
+
+      - name: Download Apache Arrow's util_free_space.sh
+        if: ${{ inputs.create_release == true }}
+        run: |
+          curl -Ls https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh | bash
+
+      - name: Check Disk Space After Cleanup
+        if: ${{ inputs.create_release == true }}
+        run: |
+          echo "===== Total Disk Space After Cleanup in GB ====="
+          df -BG
+
+      - name: Checkout code
+        if: ${{ inputs.create_release == true }}
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Get commit hashes and generate commit URLs
+        if: ${{ inputs.create_release == true }}
+        run: |
+          GITLAB_OWNER="simonpunk"
+          GITLAB_REPO="susfs4ksu"
+          
+          declare -A BRANCH_MAP=(
+            ["gki_android12_5_10"]="gki-android12-5.10"
+            ["gki_android13_5_10"]="gki-android13-5.10"
+            ["gki_android13_5_15"]="gki-android13-5.15"
+            ["gki_android14_5_15"]="gki-android14-5.15"
+            ["gki_android14_6_1"]="gki-android14-6.1"
+            ["gki_android15_6_6"]="gki-android15-6.6"
+          )
+          
+          for var_name in "${!BRANCH_MAP[@]}"; do
+            branch_name="${BRANCH_MAP[$var_name]}"
+            COMMIT_HASH=$(git ls-remote https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO.git refs/heads/$branch_name | awk '{ print $1 }')
+            
+            if [[ -n "$COMMIT_HASH" ]]; then
+              COMMIT_URL="https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO/-/commit/$COMMIT_HASH"
+              echo "$branch_name Commit: $COMMIT_HASH"
+              echo "$branch_name Commit URL: $COMMIT_URL"
+              
+              echo "COMMIT_HASH_${var_name}=$COMMIT_HASH" >> "$GITHUB_ENV"
+              echo "COMMIT_URL_${var_name}=$COMMIT_URL" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Get KernelSU variant refs and links
+        if: ${{ inputs.create_release == true }}
+        run: |
+          # Get WKSU latest commit from wild branch
+          WKSU_REF=$(git ls-remote "https://github.com/WildKernels/Wild_KSU.git" refs/heads/wild | awk '{print $1}')
+          WKSU_URL="https://github.com/WildKernels/Wild_KSU/commit/$WKSU_REF"
+          echo "WKSU_REF=$WKSU_REF" >> $GITHUB_ENV
+          echo "WKSU_URL=$WKSU_URL" >> $GITHUB_ENV
+          
+          # Get Baseband-guard latest commit from main branch
+          BBG_REF=$(git ls-remote "https://github.com/vc-teahouse/Baseband-guard.git" refs/heads/main | awk '{print $1}')
+          BBG_URL="https://github.com/vc-teahouse/Baseband-guard/commit/$BBG_REF"
+          echo "BBG_REF=$BBG_REF" >> $GITHUB_ENV
+          echo "BBG_URL=$BBG_URL" >> $GITHUB_ENV
+
+      - name: Download Release Assets
+        if: ${{ inputs.create_release == true }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-assets
+          pattern: "*-android15-*"
+          merge-multiple: true
+
+      - name: Set release body
+        if: ${{ inputs.create_release == true }}
+        run: |
+          if [[ "${{ github.ref_name }}" == "debug" ]]; then
+            cat << 'EOF' > release_body.md
+          
+            **IMPORTANT DISCLAIMER**
+            This software is provided for testing and educational purposes only. Use at your own risk.
+            The developers are not responsible for any damage, data loss, or issues that may occur.
+            Please ensure you have proper backups before installation.
+
+            **Debug Build Information**
+            This build is compiled with SUSFS patches and includes `vmlinux` for debugging.
+
+            **Debug Features:**
+            -> **Physical Memory Debugging**: `/dev/mem` is enabled to allow debugging physical memory on device boot.
+               *Note: You may receive an Android security warning regarding this. It is expected and can be ignored.*
+            -> **QEMU/GDB Support**: Includes patches to run with QEMU GDB, allowing for kernel analysis on a desktop environment.
+            
+            Commit Hashes (at the time of release):
+            -> WKSU: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
+
+            -> Baseband-guard: [${{ env.BBG_REF }}](${{ env.BBG_URL }})
+
+            -> SUSFS4KSU: 
+              -> gki-android12-5.10: [${{ env.COMMIT_HASH_gki_android12_5_10 }}](${{ env.COMMIT_URL_gki_android12_5_10 }})
+              -> gki-android13-5.10: [${{ env.COMMIT_HASH_gki_android13_5_10 }}](${{ env.COMMIT_URL_gki_android13_5_10 }})
+              -> gki-android13-5.15: [${{ env.COMMIT_HASH_gki_android13_5_15 }}](${{ env.COMMIT_URL_gki_android13_5_15 }})
+              -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
+              -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
+              -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
+            EOF
+          else
+            cat << 'EOF' > release_body.md
+      
+            **IMPORTANT DISCLAIMER**
+            This software is provided for testing and educational purposes only. Use at your own risk.
+            The developers are not responsible for any damage, data loss, or issues that may occur.
+            Please ensure you have proper backups before installation.
+
+            Features:
+            -> Wild KSU
+            -> Multi Manager Support for WKSU, KernelSU-Next! Needs Testing: KSU, MKSU RKSU, xxKSU, KowSU and SukiSU (Best compatibility with WKSU, no support will be provided for other managers)
+            -> SUSFS ඞ v1.5.12
+            -> Scope-Minimized Manual hooks v1.4
+            -> Ptrace Patch Support for Older Kernels (<5.16)
+            -> IPSet Support for Advanced Network Filtering
+            -> Wireguard Support
+            -> BBR v1 Support
+            -> Added BBG support to prevent unauthorised writes to certain partitions: https://github.com/vc-teahouse/Baseband-guard
+
+            Notes:
+            -> SUS SU Mode 2 will show as disabled or not compatble due to non-kprobe hooks and is not needed anymore!
+            -> Official Kernel Flasher is broken with latest susfs, try https://github.com/fatalcoder524/KernelFlasher/
+            -> **Files ending with .zip**: Available for fastboot flashing
+            -> **Files ending with -vmlinux.zip**: Debug symbols for kernel debugging and crash analysis
+            -> **Warning**: kernel files may not boot on some Android 16 devices
+      
+            Module: 
+            -> https://github.com/sidex15/ksu_module_susfs
+      
+            Managers:
+            -> WKSU: https://github.com/WildKernels/Wild_KSU
+            -> Next: https://github.com/KernelSU-Next/KernelSU-Next
+            
+            Commit Hashes (at the time of release):
+            -> WKSU: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
+
+            -> Baseband-guard: [${{ env.BBG_REF }}](${{ env.BBG_URL }})
+
+            -> SUSFS4KSU: 
+              -> gki-android12-5.10: [${{ env.COMMIT_HASH_gki_android12_5_10 }}](${{ env.COMMIT_URL_gki_android12_5_10 }})
+              -> gki-android13-5.10: [${{ env.COMMIT_HASH_gki_android13_5_10 }}](${{ env.COMMIT_URL_gki_android13_5_10 }})
+              -> gki-android13-5.15: [${{ env.COMMIT_HASH_gki_android13_5_15 }}](${{ env.COMMIT_URL_gki_android13_5_15 }})
+              -> gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
+              -> gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
+              -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
+            EOF
+          fi
+
+      - name: Create GitHub Release
+        if: ${{ inputs.create_release == true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.define_release.outputs.release_tag }}
           prerelease: ${{ inputs.release_type == 'Pre-Release' }}
           files: ./release-assets/*.zip
           name: ${{ env.RELEASE_NAME }}
