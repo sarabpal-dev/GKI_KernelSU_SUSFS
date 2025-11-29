@@ -88,7 +88,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    if: (success() || failure()) && github.event.inputs.create_release == true
+    if: always()
     needs:
       - build-a12-5-10
       - build-a13-5-10
@@ -101,6 +101,8 @@ jobs:
       RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
       
     steps:
+      - name: Dump Inputs
+        run: echo "Input 'create_release' has value: ${{ github.event.inputs.create_release }}"
       - name: Free Disk Space
         run: |
           echo "===== Initial Total Disk Space in GB ====="
