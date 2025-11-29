@@ -96,6 +96,8 @@ jobs:
       - build-a14-5-15
       - build-a14-6-1
       - build-a15-6-6
+    env:
+      RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
     steps:
       - run: echo "All build jobs finished. Proceeding to release."
       - name: Debug Inputs
@@ -103,16 +105,8 @@ jobs:
           echo "inputs.create_release: ${{ inputs.create_release }}"
           echo "inputs.build_selection: ${{ inputs.build_selection }}"
 
-  release:
-    runs-on: ubuntu-latest
-    if: ${{ inputs.create_release == true }}
-    needs:
-      - release_gate
-    env:
-      RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.12"
-      
-    steps:
       - name: Free Disk Space
+        if: ${{ inputs.create_release == true }}
         run: |
           echo "===== Initial Total Disk Space in GB ====="
           df -h
@@ -121,12 +115,14 @@ jobs:
           df -h
 
       - name: Checkout code
+        if: ${{ inputs.create_release == true }}
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Get commit hashes and generate commit URLs
+        if: ${{ inputs.create_release == true }}
         run: |
           GITLAB_OWNER="simonpunk"
           GITLAB_REPO="susfs4ksu"
@@ -155,6 +151,7 @@ jobs:
           done
 
       - name: Get KernelSU variant refs and links
+        if: ${{ inputs.create_release == true }}
         run: |
           # Get WKSU latest commit from wild branch
           WKSU_REF=$(git ls-remote "https://github.com/WildKernels/Wild_KSU.git" refs/heads/wild | awk '{print $1}')
@@ -169,6 +166,7 @@ jobs:
           echo "BBG_URL=$BBG_URL" >> $GITHUB_ENV
 
       - name: Generate New Tag
+        if: ${{ inputs.create_release == true }}
         run: |
             LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
             if [ -z "$LATEST_TAG" ]; then
@@ -181,11 +179,13 @@ jobs:
             echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
 
       - name: Download All Release Assets
+        if: ${{ inputs.create_release == true }}
         uses: actions/download-artifact@v4
         with:
           path: ./release-assets
 
       - name: Set release body
+        if: ${{ inputs.create_release == true }}
         run: |
           cat << 'EOF' > release_body.md
       
@@ -234,6 +234,7 @@ jobs:
           EOF
 
       - name: Create GitHub Release
+        if: ${{ inputs.create_release == true }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.NEW_TAG }}
@@ -244,6 +245,7 @@ jobs:
           token: ${{ secrets.RELEASE }}
 
       - name: Display Files Uploaded
+        if: ${{ inputs.create_release == true }}
         run: |
           echo "GitHub release will be created with the following files:"
           ls -lhR ./release-assets/
